@@ -39,7 +39,9 @@
       kind = k;
       const dir = k === 'day' ? 'charts/' : 'charts60/';
       status.textContent = k === 'day' ? '正在加载已导出的日K…' : '正在加载已导出的60分钟K…';
-      controls.replaceChildren(); scroll.replaceChildren(); inner.append(canvas); canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+      controls.replaceChildren();
+      scroll.replaceChildren(inner);
+      canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
       try {
         const response = await fetch(new URL(dir + encodeURIComponent(code) + '.json', location.href));
         if (response.status === 404) throw Error(k === 'day'
