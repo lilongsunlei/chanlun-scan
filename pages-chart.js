@@ -37,8 +37,8 @@
     repaint = renderTab;
     const loadKind = async k => {
       kind = k;
-      const dir = k === 'day' ? 'charts/' : 'charts60/';
-      status.textContent = k === 'day' ? '正在加载已导出的日K…' : '正在加载已导出的60分钟K…';
+      const dir = k === 'day' ? 'charts/' : k === 'm60' ? 'charts60/' : 'charts30/';
+      status.textContent = k === 'day' ? '正在加载已导出的日K…' : k === 'm60' ? '正在加载已导出的60分钟K…' : '正在加载已导出的30分钟K…';
       controls.replaceChildren();
       scroll.replaceChildren(inner);
       canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
@@ -46,12 +46,12 @@
         const response = await fetch(new URL(dir + encodeURIComponent(code) + '.json', location.href));
         if (response.status === 404) throw Error(k === 'day'
           ? '本次导出没有该股的缓存日线，仍可展开查看扫描判据。'
-          : '该股周线背景非「支持」，未导出60分钟图；仅周线支持的股票带60分钟K线。');
+          : '该股周线背景非「支持」，未导出分钟级K线；仅周线支持的股票带60/30分钟图。');
         if (!response.ok) throw Error('K线读取失败，请稍后重试。');
         saved = await response.json();
         if (current !== ticket || !dialog.open) return;
-        const unitLabel = k === 'day' ? '日K' : '60分钟K';
-        status.textContent = `${unitLabel}截止 ${saved.date} · 最近 ${saved.chart.pack.n} 根 · 非实时行情。图表来自导出时的缓存，可能与所选历史扫描批次不同；图中买卖点按该${k === 'day' ? '日线' : '60分钟线'}重新计算。`;
+        const unitLabel = k === 'day' ? '日K' : k === 'm60' ? '60分钟K' : '30分钟K';
+        status.textContent = `${unitLabel}截止 ${saved.date} · 最近 ${saved.chart.pack.n} 根 · 非实时行情。图表来自导出时的缓存，可能与所选历史扫描批次不同；图中买卖点按该${k === 'day' ? '日线' : k === 'm60' ? '60分钟线' : '30分钟线'}重新计算。`;
         for (const [key, label] of [['bi','笔'],['fx','分型'],['zs','中枢'],['buy','买点'],['sell','卖点'],['ma','均线'],['macd','MACD']]) {
           LAYERS[key] = 1;
           const item = document.createElement('label'), checkbox = document.createElement('input');
@@ -81,7 +81,7 @@
         if (current === ticket && dialog.open) { status.textContent = error.message; saved = null; }
       }
     };
-    for (const [k, label] of [['day','日线'],['m60','60分钟']]) {
+    for (const [k, label] of [['day','日线'],['m60','60分钟'],['m30','30分钟']]) {
       const item = document.createElement('label'), radio = document.createElement('input');
       radio.type = 'radio'; radio.name = 'tf-' + current; radio.checked = k === 'day';
       radio.onchange = () => { if (radio.checked) loadKind(k); };
