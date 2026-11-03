@@ -46,7 +46,7 @@
         const response = await fetch(new URL(dir + encodeURIComponent(code) + '.json', location.href));
         if (response.status === 404) throw Error(k === 'day'
           ? '本次导出没有该股的缓存日线，仍可展开查看扫描判据。'
-          : '该股周线背景非「支持」，未导出分钟级K线；仅周线支持的股票带60/30分钟图。');
+          : '该股周线背景非「支持/整理观察」，未导出分钟级K线；仅周线支持或整理观察的股票带60/30分钟图。');
         if (!response.ok) throw Error('K线读取失败，请稍后重试。');
         saved = await response.json();
         if (current !== ticket || !dialog.open) return;
