@@ -24,6 +24,7 @@
  *   d.o/h/l/c  价格 ×100 的整数
  *   d.v        成交量（原值）
  *   d.md       MACD 柱 ×1000 的整数
+ *   d.kj       {k:[], d:[], j:[]}  KDJ 三线 ×100 的整数（预热期为 null）
  *   d.fx       [[i, t, p]]      分型  t=1 顶 / -1 底
  *   d.bi       [[i, t, p]]      笔端点
  *   d.zs       [[i0,i1,ZD,ZG]]  中枢（价格也是 ×100）
@@ -36,7 +37,8 @@ var dpr = Math.min(window.devicePixelRatio || 1, 2);
 // 中国习惯：涨红跌绿
 var COL = {up:'#dc2626', dn:'#16a34a', ma5:'#f59e0b', ma10:'#3b82f6', ma20:'#8b5cf6',
            grid:'#eef0f2', tx:'#8b95a1', zg:'#2563eb', stop:'#dc2626', buy:'#7c3aed',
-           sell:'#0d9488'};   // 卖点用青绿 —— 和「跌绿」区分开，避免和 K 线颜色混
+           sell:'#0d9488',                       // 卖点用青绿 —— 和「跌绿」区分开，避免和 K 线颜色混
+           kK:'#eab308', kD:'#0891b2', kJ:'#db2777'};   // KDJ 三线：K 黄 / D 青 / J 洋红（行情软件惯例）
 
 // 术语表。默认是股票分析语境的措辞；「纯技术分析」模式由页面注入 window.CL_LAB 覆盖。
 // ★ 为什么要可覆盖：「买点 / 入场 / 止损 / 至今涨跌」在内容平台语境里等同于投顾建议
@@ -59,8 +61,8 @@ if (typeof window !== 'undefined' && window.CL_LAB) {
   for (var _lk in window.CL_LAB) { if (window.CL_LAB[_lk] !== undefined) LAB[_lk] = window.CL_LAB[_lk]; }
 }
 
-// 7 个图层开关，默认全开。关掉一个就重绘，不重新拉数据。
-var LAYERS = {bi:1, fx:1, zs:1, buy:1, sell:1, histbuy:1, ma:1, macd:1};
+// 图层开关，默认全开。关掉一个就重绘，不重新拉数据。
+var LAYERS = {bi:1, fx:1, zs:1, buy:1, sell:1, histbuy:1, ma:1, macd:1, kdj:1};
 
 var LAST = {d:null, opt:null};
 
@@ -148,9 +150,11 @@ function draw(ctx, d, dates, opt, hist) {
   var nar = L0.nar, PL = L0.PL, PR = L0.PR, cw = L0.cw;
   var PT = 12, PB = nar ? 18 : 20;
   var macdH = (LAYERS.macd && d.md && d.md.length) ? (nar ? 52 : 64) : 0;
+  var kdjH = (LAYERS.kdj && d.kj && d.kj.k && d.kj.k.length) ? (nar ? 46 : 56) : 0;
   var volH = nar ? 36 : 46, gap = nar ? 12 : 16;
-  var mainH = H - PT - PB - volH - gap - (macdH ? macdH + gap : 0);
+  var mainH = H - PT - PB - volH - gap - (macdH ? macdH + gap : 0) - (kdjH ? kdjH + gap : 0);
   var volY = PT + mainH + gap, macdY = volY + volH + gap;
+  var kdjY = macdY + (macdH ? macdH + gap : 0);
   var n = d.n;
 
   var start = dateStart(dates, d, n);
@@ -409,6 +413,60 @@ function draw(ctx, d, dates, opt, hist) {
     ctx.strokeStyle = COL.grid;
     ctx.beginPath(); ctx.moveTo(PL, macdY + macdH); ctx.lineTo(W - PR, macdY + macdH); ctx.stroke();
   }
+
+  // KDJ 副图：K 黄 / D 青 / J 洋红。固定 0~100 标尺 + 80/20 虚线参考位
+  //（低位/高位判断要的就是「离 20/80 有多远」，自动取值域会让每张图的标尺都不一样，
+  //  低不低就没法横向比较了）。J 会出界（<0 或 >100），出界部分裁掉不外溢。
+  if (kdjH) {
+    var kj = d.kj, kn = kj.k.length;
+    ctx.textAlign = 'left';
+    ctx.font = (nar ? 9 : 10) + 'px system-ui,sans-serif';
+    ctx.fillStyle = COL.tx;
+    ctx.fillText('KDJ(9,3,3)', PL + 2, kdjY - 4);
+    // 末值图例：KDJ 的看点就是三线当前值与相对位置，直接标在标题行省一次悬停
+    var li = kn - 1;
+    if (kj.k[li] != null) {
+      var lv = [[COL.kK, 'K ' + (kj.k[li] / 100).toFixed(1)],
+                [COL.kD, 'D ' + (kj.d[li] / 100).toFixed(1)],
+                [COL.kJ, 'J ' + (kj.j[li] / 100).toFixed(1)]];
+      var lx = PL + (nar ? 54 : 66);
+      for (var q3 = 0; q3 < 3; q3++) {
+        ctx.fillStyle = lv[q3][0];
+        ctx.fillText(lv[q3][1], lx, kdjY - 4);
+        lx += ctx.measureText(lv[q3][1]).width + (nar ? 5 : 8);
+      }
+    }
+    var YK = function (v) { return kdjY + (1 - v / 100) * kdjH; };
+    ctx.strokeStyle = COL.grid; ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    [80, 20].forEach(function (rl) {
+      ctx.beginPath(); ctx.moveTo(PL, YK(rl)); ctx.lineTo(W - PR, YK(rl)); ctx.stroke();
+    });
+    ctx.setLineDash([]);
+    ctx.fillStyle = COL.tx; ctx.font = (nar ? 8 : 9) + 'px system-ui,sans-serif';
+    ctx.fillText('80', PL + 2, YK(80) - 1.5);
+    ctx.fillText('20', PL + 2, YK(20) - 1.5);
+    // 三条线。预热期的 null 断开折线（moveTo 重新起笔），不画假值。
+    ctx.save();
+    ctx.beginPath(); ctx.rect(PL, kdjY, cw, kdjH); ctx.clip();
+    var kjLine = function (arr, col) {
+      ctx.strokeStyle = col; ctx.lineWidth = 1.2; ctx.beginPath();
+      var mv3 = false;
+      for (var i11 = 0; i11 < arr.length; i11++) {
+        var vv = arr[i11];
+        if (vv == null) { mv3 = false; continue; }
+        var xx = X(i11), yy = YK(vv / 100);
+        if (!mv3) { ctx.moveTo(xx, yy); mv3 = true; } else ctx.lineTo(xx, yy);
+      }
+      ctx.stroke();
+    };
+    kjLine(kj.k, COL.kK);
+    kjLine(kj.d, COL.kD);
+    kjLine(kj.j, COL.kJ);
+    ctx.restore();
+    ctx.strokeStyle = COL.grid;
+    ctx.beginPath(); ctx.moveTo(PL, kdjY + kdjH); ctx.lineTo(W - PR, kdjY + kdjH); ctx.stroke();
+  }
 }
 
 // 悬停 / 触摸 十字光标 tooltip
@@ -446,6 +504,10 @@ function bindTip(cv, d, dates, hist, tipEl) {
     var chg = ((d.c[i] - d.c[i - 1]) / d.c[i - 1] * 100).toFixed(2);
     var txt = dt + '\n开 ' + po + '  高 ' + ph + '\n低 ' + pl + '  收 ' + pc
             + '\n涨跌 ' + (i > 0 ? chg : '—') + '%';
+    if (d.kj && d.kj.k && d.kj.k[i] != null) {
+      txt += '\nK ' + (d.kj.k[i] / 100).toFixed(1) + '  D ' + (d.kj.d[i] / 100).toFixed(1)
+           + '  J ' + (d.kj.j[i] / 100).toFixed(1);
+    }
     if (hist) {
       // ★ 不 break：同一根 K 线上可能同时压着买点和卖点（或一类 + 三类），
       //   只显示第一个会让人以为「这根只有一个信号」。逐个列出。
