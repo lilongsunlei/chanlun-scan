@@ -414,9 +414,12 @@ function draw(ctx, d, dates, opt, hist) {
     ctx.beginPath(); ctx.moveTo(PL, macdY + macdH); ctx.lineTo(W - PR, macdY + macdH); ctx.stroke();
   }
 
-  // KDJ 副图：K 黄 / D 青 / J 洋红。固定 0~100 标尺 + 80/20 虚线参考位
-  //（低位/高位判断要的就是「离 20/80 有多远」，自动取值域会让每张图的标尺都不一样，
-  //  低不低就没法横向比较了）。J 会出界（<0 或 >100），出界部分裁掉不外溢。
+  // KDJ 副图：K 黄 / D 青 / J 洋红。基础标尺 0~100 + 80/20 虚线参考位
+  //（低位/高位判断要的就是「离 20/80 有多远」，20/80 参考位必须横向可比）。
+  // ★ J = 3K−2D 会出界（<0 或 >100）。之前出界部分直接按 0~100 裁掉，
+  //   结果 J 一出负值线条就在面板底边「凭空消失」（用户反馈的「底部被吃了」）。
+  //   改为：数据真出界时把值域向外扩一档（0/100 基线画实线），线条永远画完整；
+  //   没出界时标尺和原来一模一样，横向可比性不受影响。
   if (kdjH) {
     var kj = d.kj, kn = kj.k.length;
     ctx.textAlign = 'left';
@@ -436,7 +439,17 @@ function draw(ctx, d, dates, opt, hist) {
         lx += ctx.measureText(lv[q3][1]).width + (nar ? 5 : 8);
       }
     }
-    var YK = function (v) { return kdjY + (1 - v / 100) * kdjH; };
+    // 值域：0~100 为基础，K/D 数学上出不了界，扫 J（顺带 K/D 兜底）决定是否外扩
+    var jlo = 0, jhi = 100;
+    for (var i12 = 0; i12 < kn; i12++) {
+      var v1 = kj.k[i12], v2 = kj.d[i12], v3 = kj.j[i12];
+      if (v1 != null) { if (v1 < jlo * 100) jlo = v1 / 100; if (v1 > jhi * 100) jhi = v1 / 100; }
+      if (v2 != null) { if (v2 < jlo * 100) jlo = v2 / 100; if (v2 > jhi * 100) jhi = v2 / 100; }
+      if (v3 != null) { if (v3 < jlo * 100) jlo = v3 / 100; if (v3 > jhi * 100) jhi = v3 / 100; }
+    }
+    if (jlo < 0) jlo -= 4;                       // 出界侧留 4 个点的呼吸空隙
+    if (jhi > 100) jhi += 4;
+    var YK = function (v) { return kdjY + (jhi - v) / (jhi - jlo) * kdjH; };
     ctx.strokeStyle = COL.grid; ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
     [80, 20].forEach(function (rl) {
@@ -446,6 +459,14 @@ function draw(ctx, d, dates, opt, hist) {
     ctx.fillStyle = COL.tx; ctx.font = (nar ? 8 : 9) + 'px system-ui,sans-serif';
     ctx.fillText('80', PL + 2, YK(80) - 1.5);
     ctx.fillText('20', PL + 2, YK(20) - 1.5);
+    // 值域外扩了才画 0/100 基线（实线，区别于 80/20 虚线），并标注刻度
+    [0, 100].forEach(function (bl) {
+      if ((bl === 0 && jlo < 0) || (bl === 100 && jhi > 100)) {
+        ctx.strokeStyle = COL.grid;
+        ctx.beginPath(); ctx.moveTo(PL, YK(bl)); ctx.lineTo(W - PR, YK(bl)); ctx.stroke();
+        ctx.fillText(String(bl), PL + 2, YK(bl) - 1.5);
+      }
+    });
     // 三条线。预热期的 null 断开折线（moveTo 重新起笔），不画假值。
     ctx.save();
     ctx.beginPath(); ctx.rect(PL, kdjY, cw, kdjH); ctx.clip();
